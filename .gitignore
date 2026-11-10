@@ -48,5 +48,6 @@ Thumbs.db
 *.avi
 *.flv*
 
+.env
 
 *.mp4

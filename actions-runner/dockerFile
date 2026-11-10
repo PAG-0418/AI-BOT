@@ -1,0 +1,60 @@
+
+FROM ubuntu:24.04
+
+ARG RUNNER_VERSION=2.336.0
+
+RUN apt-get update && \
+    apt-get install -y \
+        curl \
+        ca-certificates \
+        git \
+        jq \
+        sudo \
+        python3.12 \
+        python3.12-venv \
+        python3-pip \
+        python-is-python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Google Chrome for selenium tests (the .deb pulls in all required libs)
+RUN curl -fL -o /tmp/chrome.deb \
+        "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb" \
+    && apt-get update \
+    && apt-get install -y /tmp/chrome.deb \
+    && rm /tmp/chrome.deb \
+    && rm -rf /var/lib/apt/lists/*
+
+# Docker CLI (static binary) to manage host containers via the mounted docker.sock
+RUN curl -fL "https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz" \
+    | tar xz --strip-components=1 -C /usr/local/bin docker/docker
+
+WORKDIR /actions-runner
+
+RUN curl -fL \
+    -o actions-runner.tar.gz \
+    "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz" \
+    && tar xzf actions-runner.tar.gz \
+    && rm actions-runner.tar.gz
+
+RUN ./bin/installdependencies.sh
+
+RUN useradd -m runner && \
+    chown -R runner:runner /actions-runner && \
+    # the mounted docker.sock is root-owned, so allow docker (and only docker) via sudo
+    echo "runner ALL=(root) NOPASSWD: /usr/local/bin/docker" > /etc/sudoers.d/docker-for-runner && \
+    chmod 440 /etc/sudoers.d/docker-for-runner
+
+COPY start.sh /actions-runner/start.sh
+
+# strip any CRLF picked up from a Windows checkout, otherwise the shebang
+# resolves to a program literally named "bash\r"
+RUN sed -i 's/\r$//' /actions-runner/start.sh && \
+    chmod +x /actions-runner/start.sh && \
+    chown runner:runner /actions-runner/start.sh
+
+USER runner
+
+ENTRYPOINT ["./start.sh"]
+
+
+

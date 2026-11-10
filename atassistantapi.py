@@ -1,3 +1,4 @@
+from langfuse._client .get_client import get_client
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 import psycopg2
@@ -7,11 +8,15 @@ from embedding import calcEmbed
 from fastapi import Body
 from typing import List, Dict
 
+from dotenv import load_dotenv
+load_dotenv()  
+
 app = FastAPI()
 
 CONN_INFO = "host=localhost port=5433 dbname=at_data_db user=alex password=abc"
 OLLAMA_MODEL = "qwen3:1.7b"
 
+_client = get.client(); 
 
 class PageInfo(BaseModel):
     page: str
@@ -121,6 +126,11 @@ def generate_ollama_answer(messages: List[str] = Body(...)):
         print(f"history: {history}", flush=True)  # DEBUG
         print(f"question: {question}", flush=True)  # DEBUG
         query_vector = calcEmbed(question)
+
+        with _client.start_as_current_observation(name="answer", input={"query": question}) as trace:
+            with _client.start_as_current_observation(name="embed", input={"query": question}) as embed_trace:
+                embed_trace.update(output=query_vector)
+        
 
         conn = getDbCon()
         cur = conn.cursor()
